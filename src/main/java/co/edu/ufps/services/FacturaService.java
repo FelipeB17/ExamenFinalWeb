@@ -7,6 +7,8 @@ import co.edu.ufps.repositories.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import co.edu.ufps.exceptions.FacturaException;
+import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -57,20 +59,29 @@ public class FacturaService {
     }
 
     private void validarDatosFactura(FacturaRequestDTO facturaRequest) {
+    	// Validar cliente
         if (facturaRequest.getCliente() == null) {
-            throw new RuntimeException("No hay información del cliente");
+            throw new FacturaException("No hay información del cliente", HttpStatus.NOT_FOUND);
         }
+
+        // Validar vendedor
         if (facturaRequest.getVendedor() == null) {
-            throw new RuntimeException("No hay información del vendedor");
+            throw new FacturaException("No hay información del vendedor", HttpStatus.NOT_FOUND);
         }
+
+        // Validar cajero
         if (facturaRequest.getCajero() == null) {
-            throw new RuntimeException("No hay información del cajero");
+            throw new FacturaException("No hay información del cajero", HttpStatus.NOT_FOUND);
         }
+
+        // Validar productos
         if (facturaRequest.getProductos() == null || facturaRequest.getProductos().isEmpty()) {
-            throw new RuntimeException("No hay productos asignados para esta compra");
+            throw new FacturaException("No hay productos asignados para esta compra", HttpStatus.NOT_FOUND);
         }
+
+        // Validar medios de pago
         if (facturaRequest.getMedios_pago() == null || facturaRequest.getMedios_pago().isEmpty()) {
-            throw new RuntimeException("No hay medios de pagos asignados para esta compra");
+            throw new FacturaException("No hay medios de pagos asignados para esta compra", HttpStatus.NOT_FOUND);
         }
     }
 
@@ -186,6 +197,63 @@ public class FacturaService {
 
         if (totalPagado.compareTo(compra.getTotal()) != 0) {
             throw new RuntimeException("El valor de la factura no coincide con el valor total de los pagos");
+        }
+    }
+    
+    
+    private Producto validarProducto(String referencia, int cantidadSolicitada) {
+        Producto producto = productoRepository.findByReferencia(referencia);
+        if (producto == null) {
+            throw new FacturaException(
+                "La referencia del producto " + referencia + " no existe, por favor revisar los datos",
+                HttpStatus.NOT_FOUND
+            );
+        }
+        if (producto.getCantidad() < cantidadSolicitada) {
+            throw new FacturaException(
+                "La cantidad a comprar supera el máximo del producto en tienda",
+                HttpStatus.FORBIDDEN
+            );
+        }
+        return producto;
+    }
+
+    private void validarPago(TipoPago tipoPago, Cajero cajero, Tienda tienda) {
+        if (tipoPago == null) {
+            throw new FacturaException(
+                "Tipo de pago no permitido en la tienda",
+                HttpStatus.FORBIDDEN
+            );
+        }
+        if (cajero == null) {
+            throw new FacturaException(
+                "El token no corresponde a ningún cajero en la tienda",
+                HttpStatus.NOT_FOUND
+            );
+        }
+        if (!cajero.getTienda().getId().equals(tienda.getId())) {
+            throw new FacturaException(
+                "El cajero no está asignado a esta tienda",
+                HttpStatus.FORBIDDEN
+            );
+        }
+    }
+
+    private void validarVendedor(Vendedor vendedor) {
+        if (vendedor == null) {
+            throw new FacturaException(
+                "El vendedor no existe en la tienda",
+                HttpStatus.NOT_FOUND
+            );
+        }
+    }
+
+    private void validarTotalPagos(BigDecimal totalFactura, BigDecimal totalPagado) {
+        if (totalPagado.compareTo(totalFactura) != 0) {
+            throw new FacturaException(
+                "El valor de la factura no coincide con el valor total de los pagos",
+                HttpStatus.FORBIDDEN
+            );
         }
     }
 }

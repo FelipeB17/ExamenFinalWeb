@@ -4,6 +4,7 @@ package co.edu.ufps.controller;
 
 
 import co.edu.ufps.Dto.FacturaRequestDTO;
+import co.edu.ufps.exceptions.*;
 import co.edu.ufps.entities.Compra;
 import co.edu.ufps.services.FacturaService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +19,7 @@ import java.util.Map;
 @RequestMapping("/api")
 public class FacturaController {
 
-    @Autowired
+	@Autowired
     private FacturaService facturaService;
 
     @PostMapping("/crear/{tiendaUuid}")
@@ -38,13 +39,20 @@ public class FacturaController {
             response.put("data", data);
             
             return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
+        } catch (FacturaException e) {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("status", "error");
             errorResponse.put("message", e.getMessage());
             errorResponse.put("data", null);
             
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+            return ResponseEntity.status(e.getStatus()).body(errorResponse);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", "Error interno del servidor");
+            errorResponse.put("data", null);
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 }
