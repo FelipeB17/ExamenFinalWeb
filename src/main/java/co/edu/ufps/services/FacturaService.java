@@ -49,6 +49,7 @@ public class FacturaService {
         Cajero cajero = obtenerCajero(facturaRequest.getCajero(), tienda);
 
         Compra compra = crearCompra(tienda, cliente, vendedor, cajero, facturaRequest);
+        compra = compraRepository.save(compra);
         List<DetallesCompra> detallesCompraList = procesarProductos(compra, facturaRequest.getProductos());
         procesarPagos(compra, facturaRequest.getMedios_pago());
 
@@ -182,7 +183,10 @@ public class FacturaService {
             if (tipoPago == null) {
                 throw new RuntimeException("Tipo de pago no permitido en la tienda");
             }
-
+            
+            compra =  compraRepository.save(compra);
+           
+            
             Pago pago = new Pago();
             pago.setCompra(compra);
             pago.setTipoPago(tipoPago);
@@ -194,7 +198,10 @@ public class FacturaService {
 
             totalPagado = totalPagado.add(pago.getValor());
         }
-
+  
+        System.out.print(compra.getTotal());
+        System.out.print( totalPagado);
+        
         if (totalPagado.compareTo(compra.getTotal()) != 0) {
             throw new RuntimeException("El valor de la factura no coincide con el valor total de los pagos");
         }

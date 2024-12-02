@@ -48,10 +48,11 @@ public class FacturaController {
             return ResponseEntity.status(e.getStatus()).body(errorResponse);
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
+            e.printStackTrace();
             errorResponse.put("status", "error");
             errorResponse.put("message", "Error interno del servidor");
             errorResponse.put("data", null);
-            
+     
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
