@@ -1,5 +1,11 @@
 package co.edu.ufps.Dto;
 
-public class MedioPagoDTO {
+import lombok.Data;
 
+@Data
+public class MedioPagoDTO {
+    private String tipo_pago;
+    private String tipo_tarjeta;
+    private Integer cuotas;
+    private double valor;
 }
