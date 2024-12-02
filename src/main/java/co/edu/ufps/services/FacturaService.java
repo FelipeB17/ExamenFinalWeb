@@ -1,7 +1,6 @@
 package co.edu.ufps.services;
 
 
-
 import co.edu.ufps.Dto.*;
 import co.edu.ufps.entities.*;
 import co.edu.ufps.repositories.*;
@@ -40,31 +39,86 @@ public class FacturaService {
 
     @Transactional
     public Compra procesarFactura(String tiendaUuid, FacturaRequestDTO facturaRequest) {
-        // 1. Validar y obtener la tienda
+        validarDatosFactura(facturaRequest);
+
+        Tienda tienda = obtenerTienda(tiendaUuid);
+        Cliente cliente = obtenerOCrearCliente(facturaRequest.getCliente());
+        Vendedor vendedor = obtenerVendedor(facturaRequest.getVendedor(), tienda);
+        Cajero cajero = obtenerCajero(facturaRequest.getCajero(), tienda);
+
+        Compra compra = crearCompra(tienda, cliente, vendedor, cajero, facturaRequest);
+        List<DetallesCompra> detallesCompraList = procesarProductos(compra, facturaRequest.getProductos());
+        procesarPagos(compra, facturaRequest.getMedios_pago());
+
+        compra = compraRepository.save(compra);
+        detallesCompraRepository.saveAll(detallesCompraList);
+
+        return compra;
+    }
+
+    private void validarDatosFactura(FacturaRequestDTO facturaRequest) {
+        if (facturaRequest.getCliente() == null) {
+            throw new RuntimeException("No hay información del cliente");
+        }
+        if (facturaRequest.getVendedor() == null) {
+            throw new RuntimeException("No hay información del vendedor");
+        }
+        if (facturaRequest.getCajero() == null) {
+            throw new RuntimeException("No hay información del cajero");
+        }
+        if (facturaRequest.getProductos() == null || facturaRequest.getProductos().isEmpty()) {
+            throw new RuntimeException("No hay productos asignados para esta compra");
+        }
+        if (facturaRequest.getMedios_pago() == null || facturaRequest.getMedios_pago().isEmpty()) {
+            throw new RuntimeException("No hay medios de pagos asignados para esta compra");
+        }
+    }
+
+    private Tienda obtenerTienda(String tiendaUuid) {
         Tienda tienda = tiendaRepository.findByUuid(tiendaUuid);
         if (tienda == null) {
             throw new RuntimeException("Tienda no encontrada");
         }
+        return tienda;
+    }
 
-        // 2. Validar y obtener o crear el cliente
-        Cliente cliente = obtenerOCrearCliente(facturaRequest.getCliente());
+    private Cliente obtenerOCrearCliente(ClienteDTO clienteDTO) {
+        TipoDocumento tipoDocumento = tipoDocumentoRepository.findByNombre(clienteDTO.getTipo_documento());
+        if (tipoDocumento == null) {
+            throw new RuntimeException("Tipo de documento no válido");
+        }
 
-        // 3. Validar y obtener el vendedor
-        Vendedor vendedor = vendedorRepository.findByDocumento(facturaRequest.getVendedor().getDocumento());
+        Cliente cliente = clienteRepository.findByDocumentoAndTipoDocumento(clienteDTO.getDocumento(), tipoDocumento);
+        if (cliente == null) {
+            cliente = new Cliente();
+            cliente.setDocumento(clienteDTO.getDocumento());
+            cliente.setNombre(clienteDTO.getNombre());
+            cliente.setTipoDocumento(tipoDocumento);
+            cliente = clienteRepository.save(cliente);
+        }
+        return cliente;
+    }
+
+    private Vendedor obtenerVendedor(VendedorDTO vendedorDTO, Tienda tienda) {
+        Vendedor vendedor = vendedorRepository.findByDocumento(vendedorDTO.getDocumento());
         if (vendedor == null) {
             throw new RuntimeException("El vendedor no existe en la tienda");
         }
+        return vendedor;
+    }
 
-        // 4. Validar y obtener el cajero
-        Cajero cajero = cajeroRepository.findByToken(facturaRequest.getCajero().getToken());
+    private Cajero obtenerCajero(CajeroDTO cajeroDTO, Tienda tienda) {
+        Cajero cajero = cajeroRepository.findByToken(cajeroDTO.getToken());
         if (cajero == null) {
             throw new RuntimeException("El token no corresponde a ningún cajero en la tienda");
         }
         if (!cajero.getTienda().getId().equals(tienda.getId())) {
             throw new RuntimeException("El cajero no está asignado a esta tienda");
         }
+        return cajero;
+    }
 
-        // 5. Crear la compra
+    private Compra crearCompra(Tienda tienda, Cliente cliente, Vendedor vendedor, Cajero cajero, FacturaRequestDTO facturaRequest) {
         Compra compra = new Compra();
         compra.setCliente(cliente);
         compra.setTienda(tienda);
@@ -72,12 +126,14 @@ public class FacturaService {
         compra.setCajero(cajero);
         compra.setFecha(LocalDateTime.now());
         compra.setImpuestos(BigDecimal.valueOf(facturaRequest.getImpuesto()));
+        return compra;
+    }
 
-        // 6. Procesar los productos y crear los detalles de compra
+    private List<DetallesCompra> procesarProductos(Compra compra, List<ProductoDTO> productosDTO) {
         List<DetallesCompra> detallesCompraList = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
 
-        for (ProductoDTO productoDTO : facturaRequest.getProductos()) {
+        for (ProductoDTO productoDTO : productosDTO) {
             Producto producto = productoRepository.findByReferencia(productoDTO.getReferencia());
             if (producto == null) {
                 throw new RuntimeException("La referencia del producto " + productoDTO.getReferencia() + " no existe, por favor revisar los datos");
@@ -100,37 +156,12 @@ public class FacturaService {
 
             detallesCompraList.add(detallesCompra);
 
-            // Actualizar la cantidad del producto
             producto.setCantidad(producto.getCantidad() - productoDTO.getCantidad());
             productoRepository.save(producto);
         }
 
         compra.setTotal(total);
-        compra = compraRepository.save(compra);
-
-        // Guardar los detalles de compra
-        detallesCompraRepository.saveAll(detallesCompraList);
-
-        // 7. Procesar los pagos
-        procesarPagos(compra, facturaRequest.getMedios_pago());
-
-        return compra;
-    }
-
-    private Cliente obtenerOCrearCliente(ClienteDTO clienteDTO) {
-        Cliente cliente = clienteRepository.findByDocumentoAndTipoDocumento_Nombre(clienteDTO.getDocumento(), clienteDTO.getTipo_documento());
-        if (cliente == null) {
-            TipoDocumento tipoDocumento = tipoDocumentoRepository.findByNombre(clienteDTO.getTipo_documento());
-            if (tipoDocumento == null) {
-                throw new RuntimeException("Tipo de documento no válido");
-            }
-            cliente = new Cliente();
-            cliente.setDocumento(clienteDTO.getDocumento());
-            cliente.setNombre(clienteDTO.getNombre());
-            cliente.setTipoDocumento(tipoDocumento);
-            cliente = clienteRepository.save(cliente);
-        }
-        return cliente;
+        return detallesCompraList;
     }
 
     private void procesarPagos(Compra compra, List<MedioPagoDTO> mediosPago) {

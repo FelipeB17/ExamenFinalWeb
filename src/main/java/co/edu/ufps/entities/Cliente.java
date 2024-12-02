@@ -1,11 +1,9 @@
 package co.edu.ufps.entities;
 
-
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "cliente")
@@ -26,6 +24,5 @@ public class Cliente {
 
     @ManyToOne
     @JoinColumn(name = "tipo_documento_id", nullable = false)
-    @JsonIgnore
     private TipoDocumento tipoDocumento;
 }
