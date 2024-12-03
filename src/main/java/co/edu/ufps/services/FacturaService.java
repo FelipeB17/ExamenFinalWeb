@@ -144,34 +144,35 @@ public class FacturaService {
     private List<DetallesCompra> procesarProductos(Compra compra, List<ProductoDTO> productosDTO) {
         List<DetallesCompra> detallesCompraList = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
-
+        
         for (ProductoDTO productoDTO : productosDTO) {
             Producto producto = productoRepository.findByReferencia(productoDTO.getReferencia());
             if (producto == null) {
-                throw new RuntimeException("La referencia del producto " + productoDTO.getReferencia() + " no existe, por favor revisar los datos");
+                throw new RuntimeException("La referencia del producto " + productoDTO.getReferencia()
+                        + " no existe, por favor revisar los datos");
             }
             if (producto.getCantidad() < productoDTO.getCantidad()) {
                 throw new RuntimeException("La cantidad a comprar supera el máximo del producto en tienda");
             }
-
+            
             DetallesCompra detallesCompra = new DetallesCompra();
             detallesCompra.setCompra(compra);
             detallesCompra.setProducto(producto);
             detallesCompra.setCantidad(productoDTO.getCantidad());
             detallesCompra.setPrecio(producto.getPrecio());
             detallesCompra.setDescuento(BigDecimal.valueOf(productoDTO.getDescuento()));
-
+            
             BigDecimal subtotal = producto.getPrecio()
-                    .multiply(BigDecimal.valueOf(productoDTO.getCantidad()))
-                    .subtract(BigDecimal.valueOf(productoDTO.getDescuento()));
+                    .multiply(BigDecimal.valueOf(100).subtract(BigDecimal.valueOf(productoDTO.getDescuento())))
+                    .divide(BigDecimal.valueOf(100)).multiply(BigDecimal.valueOf(productoDTO.getCantidad()));
             total = total.add(subtotal);
-
+            
             detallesCompraList.add(detallesCompra);
-
+            
             producto.setCantidad(producto.getCantidad() - productoDTO.getCantidad());
             productoRepository.save(producto);
         }
-
+        
         compra.setTotal(total);
         return detallesCompraList;
     }
@@ -183,25 +184,24 @@ public class FacturaService {
             if (tipoPago == null) {
                 throw new RuntimeException("Tipo de pago no permitido en la tienda");
             }
-            
-            compra =  compraRepository.save(compra);
-           
-            
+            compra = compraRepository.save(compra);
             Pago pago = new Pago();
             pago.setCompra(compra);
             pago.setTipoPago(tipoPago);
             pago.setTarjetaTipo(medioPagoDTO.getTipo_tarjeta());
             pago.setValor(BigDecimal.valueOf(medioPagoDTO.getValor()));
             pago.setCuotas(medioPagoDTO.getCuotas());
-
+            
             pagoRepository.save(pago);
-
+            
             totalPagado = totalPagado.add(pago.getValor());
         }
-  
-        System.out.print(compra.getTotal());
-        System.out.print( totalPagado);
-        
+        compra.setTotal(
+                compra.getTotal()
+                .multiply(BigDecimal.valueOf(100).add(compra.getImpuestos()))
+                .divide(BigDecimal.valueOf(100))
+            );
+        compra = compraRepository.save(compra);
         if (totalPagado.compareTo(compra.getTotal()) != 0) {
             throw new RuntimeException("El valor de la factura no coincide con el valor total de los pagos");
         }
